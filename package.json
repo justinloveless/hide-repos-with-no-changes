@@ -1,0 +1,81 @@
+{
+  "name": "hide-repos-with-no-changes",
+  "displayName": "Hide Repos with No Changes",
+  "description": "Hide repositories with no changes in the Source Control panel",
+  "version": "0.0.1",
+  "publisher": "jloveless",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justinloveless/hide-repos-with-no-changes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/justinloveless/hide-repos-with-no-changes/issues"
+  },
+  "homepage": "https://github.com/justinloveless/hide-repos-with-no-changes#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "source control",
+    "scm",
+    "repository",
+    "multi-repo"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hideReposWithNoChanges.toggle",
+        "title": "Toggle Hide Repos with No Changes",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "hideReposWithNoChanges.rescan",
+        "title": "Rescan Repositories (Hide Repos)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "hideReposWithNoChanges.toggle",
+          "group": "navigation",
+          "when": "!hideReposWithNoChanges.isHiding"
+        },
+        {
+          "command": "hideReposWithNoChanges.toggle",
+          "group": "navigation",
+          "when": "hideReposWithNoChanges.isHiding",
+          "icon": "$(eye)"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  },
+  "extensionDependencies": [
+    "vscode.git"
+  ]
+}
+
