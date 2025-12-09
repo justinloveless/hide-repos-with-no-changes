@@ -9,7 +9,7 @@ This extension helps you manage multi-repository workspaces by hiding repositori
 - Toolbar button in the Source Control panel for quick access
 - Visual indicator showing whether hiding is enabled (eye icon changes)
 - Simple one-command toggle via Command Palette or toolbar button
-- Badge count on Source Control panel showing number of uncommitted changes per repository (mimics VS Code default behavior that Cursor is missing)
+- Badge count on Source Control activity bar icon showing total number of uncommitted changes across all repositories (mimics VS Code default behavior that Cursor is missing) - allows you to see you have changes even when the panel is closed
 
 ## Usage
 

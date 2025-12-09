@@ -218,7 +218,10 @@ async function checkRepoHasChanges(repoPath: string): Promise<boolean> {
 
 /**
  * Update the badge count for all repositories to show the number of files with uncommitted changes.
- * This mimics the VS Code default behavior that Cursor is missing.
+ * This sets the badge on the Source Control activity bar icon (the icon you click to open the panel).
+ * VS Code/Cursor automatically aggregates the counts from all repositories and displays the total
+ * on the Source Control icon in the activity bar, so you can see you have changes even when the
+ * panel is closed. This mimics the VS Code default behavior that Cursor is missing.
  */
 function updateRepositoryBadges() {
     if (!gitAPI) {
@@ -234,6 +237,8 @@ function updateRepositoryBadges() {
                 repo.state.mergeChanges.length;
             
             // Set the badge count on the source control
+            // The platform automatically aggregates all repository counts
+            // and displays the total on the Source Control activity bar icon
             if (repo.sourceControl) {
                 repo.sourceControl.count = totalChanges;
             }
