@@ -51,3 +51,4 @@ You can add a keyboard shortcut by:
 2. Search for "Toggle Hide Repos with No Changes"
 3. Click the `+` icon and assign your preferred shortcut (e.g., `Cmd+Shift+H`)
 
+

@@ -85,3 +85,4 @@ If you want to use this extension in your regular Cursor/VS Code instance:
 - Solution: Check that `extensionDependencies` includes "vscode.git"
 - Ensure you have at least one Git repository open
 
+

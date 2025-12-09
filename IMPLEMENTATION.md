@@ -108,3 +108,4 @@ If you encounter issues:
 
 **Ready to test!** Press F5 in this project to launch the extension. 🚀
 
+

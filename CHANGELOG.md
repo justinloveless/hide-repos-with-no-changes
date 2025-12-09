@@ -10,3 +10,4 @@ All notable changes to the "hide-repos-with-no-changes" extension will be docume
 - Automatic visibility updates when repository state changes
 - Support for workspaces with multiple Git repositories
 
+
