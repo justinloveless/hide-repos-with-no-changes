@@ -21,6 +21,7 @@ interface Repository {
     state: RepositoryState;
     ui: RepositoryUI;
     inputBox: vscode.SourceControlInputBox;
+    sourceControl: vscode.SourceControl;
 }
 
 interface RepositoryState {
@@ -216,6 +217,33 @@ async function checkRepoHasChanges(repoPath: string): Promise<boolean> {
 }
 
 /**
+ * Update the badge count for all repositories to show the number of files with uncommitted changes.
+ * This mimics the VS Code default behavior that Cursor is missing.
+ */
+function updateRepositoryBadges() {
+    if (!gitAPI) {
+        return;
+    }
+
+    gitAPI.repositories.forEach(repo => {
+        try {
+            // Count total number of files with changes (working tree + index + merge)
+            const totalChanges = 
+                repo.state.workingTreeChanges.length +
+                repo.state.indexChanges.length +
+                repo.state.mergeChanges.length;
+            
+            // Set the badge count on the source control
+            if (repo.sourceControl) {
+                repo.sourceControl.count = totalChanges;
+            }
+        } catch (error) {
+            // Silently continue if we can't set the badge
+        }
+    });
+}
+
+/**
  * Handle a file change by checking if it belongs to a hidden repo,
  * and if that repo now has changes, reopen it.
  */
@@ -300,7 +328,10 @@ export function activate(context: vscode.ExtensionContext) {
             // Check if this file belongs to a hidden repo
             handleFileChange(uri);
             // Also debounce the general updates
-            setTimeout(() => updateRepositoryVisibility(), 1000);
+            setTimeout(() => {
+                updateRepositoryVisibility();
+                updateRepositoryBadges();
+            }, 1000);
         }
     });
     fileWatcher.onDidCreate((uri) => {
@@ -308,7 +339,10 @@ export function activate(context: vscode.ExtensionContext) {
             // Check if this file belongs to a hidden repo
             handleFileChange(uri);
             // Also debounce the general updates
-            setTimeout(() => updateRepositoryVisibility(), 1000);
+            setTimeout(() => {
+                updateRepositoryVisibility();
+                updateRepositoryBadges();
+            }, 1000);
         }
     });
     fileWatcher.onDidDelete((uri) => {
@@ -316,7 +350,10 @@ export function activate(context: vscode.ExtensionContext) {
             // Check if this file belongs to a hidden repo
             handleFileChange(uri);
             // Also debounce the general updates
-            setTimeout(() => updateRepositoryVisibility(), 1000);
+            setTimeout(() => {
+                updateRepositoryVisibility();
+                updateRepositoryBadges();
+            }, 1000);
         }
     });
     context.subscriptions.push(fileWatcher);
@@ -342,6 +379,9 @@ export function activate(context: vscode.ExtensionContext) {
         // Update visibility for all repositories
         await updateRepositoryVisibility();
 
+        // Update badges after visibility changes
+        updateRepositoryBadges();
+
         // Show status message
         const hiddenCount = currentlyHiddenRepos.size;
         const message = isHidingEnabled 
@@ -360,6 +400,9 @@ export function activate(context: vscode.ExtensionContext) {
             await updateRepositoryVisibility();
         }
         
+        // Update badges after rescan
+        updateRepositoryBadges();
+        
         vscode.window.showInformationMessage(`Found ${allKnownRepos.size} repositories`);
     });
 
@@ -367,9 +410,15 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Watch for changes in repositories to update visibility dynamically
     if (gitAPI) {
+        // Initial badge update
+        updateRepositoryBadges();
+        
         // Listen for state changes in existing repositories
         gitAPI.repositories.forEach(repo => {
             const changeListener = repo.ui.onDidChange(() => {
+                // Update badges whenever repository state changes
+                updateRepositoryBadges();
+                
                 if (isHidingEnabled) {
                     updateRepositoryVisibility();
                 }
@@ -382,7 +431,13 @@ export function activate(context: vscode.ExtensionContext) {
             // Add to known repos
             allKnownRepos.set(repo.rootUri.fsPath, repo.rootUri);
             
+            // Update badges for the new repository
+            updateRepositoryBadges();
+            
             const changeListener = repo.ui.onDidChange(() => {
+                // Update badges whenever repository state changes
+                updateRepositoryBadges();
+                
                 if (isHidingEnabled) {
                     updateRepositoryVisibility();
                 }
@@ -399,6 +454,8 @@ export function activate(context: vscode.ExtensionContext) {
         // Listen for repositories being closed
         const repoCloseListener = gitAPI.onDidCloseRepository(repo => {
             // Keep in known repos but note it was closed
+            // Update badges after closing
+            updateRepositoryBadges();
         });
         context.subscriptions.push(repoCloseListener);
     }
