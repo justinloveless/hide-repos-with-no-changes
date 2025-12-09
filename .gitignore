@@ -3,4 +3,5 @@ node_modules
 .vscode-test/
 *.vsix
 
-
+# PR Monitor config (keep example only)
+.vscode/pr-monitor-config.yaml

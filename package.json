@@ -40,6 +40,28 @@
       {
         "command": "hideReposWithNoChanges.rescan",
         "title": "Rescan Repositories (Hide Repos)"
+      },
+      {
+        "command": "prMonitor.start",
+        "title": "PR Monitor: Start Monitoring Comments",
+        "icon": "$(play)"
+      },
+      {
+        "command": "prMonitor.stop",
+        "title": "PR Monitor: Stop Monitoring Comments",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "prMonitor.checkNow",
+        "title": "PR Monitor: Check for New Comments Now"
+      },
+      {
+        "command": "prMonitor.resetState",
+        "title": "PR Monitor: Reset Comment State"
+      },
+      {
+        "command": "prMonitor.openConfig",
+        "title": "PR Monitor: Open Configuration File"
       }
     ],
     "menus": {
@@ -66,9 +88,13 @@
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "@types/node": "18.x",
+    "@types/js-yaml": "^4.0.5",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",

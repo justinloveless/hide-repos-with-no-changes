@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { PRCommentMonitor } from './prCommentMonitor';
 
 const execAsync = promisify(exec);
 
@@ -49,6 +50,8 @@ let currentlyHiddenRepos: Set<string> = new Set();
 let fileWatcher: vscode.FileSystemWatcher | undefined;
 // Debounce timers for checking hidden repos
 let hiddenRepoCheckTimers: Map<string, NodeJS.Timeout> = new Map();
+// PR Comment Monitor
+let prMonitor: PRCommentMonitor | undefined;
 
 async function scanDirectoryForGitRepos(dirPath: string, maxDepth: number = 3, currentDepth: number = 0): Promise<string[]> {
     const repos: string[] = [];
@@ -293,6 +296,30 @@ export function activate(context: vscode.ExtensionContext) {
         });
     }
 
+    // Initialize PR Comment Monitor
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceRoot) {
+        const configPath = path.join(workspaceRoot, '.vscode', 'pr-monitor-config.yaml');
+        prMonitor = new PRCommentMonitor(context, configPath);
+        context.subscriptions.push(prMonitor);
+
+        // Check if auto-start is enabled
+        if (fs.existsSync(configPath)) {
+            try {
+                const yaml = require('js-yaml');
+                const config = yaml.load(fs.readFileSync(configPath, 'utf8'));
+                if (config && config.auto_start === true) {
+                    // Delay auto-start slightly to let extension fully activate
+                    setTimeout(() => {
+                        prMonitor?.start();
+                    }, 2000);
+                }
+            } catch (error) {
+                // Ignore errors in auto-start
+            }
+        }
+    }
+
     // Set up file watcher to detect changes in workspace
     fileWatcher = vscode.workspace.createFileSystemWatcher('**/*');
     fileWatcher.onDidChange((uri) => {
@@ -364,6 +391,95 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(rescanDisposable);
+
+    // Register PR Monitor commands
+    const prMonitorStartDisposable = vscode.commands.registerCommand('prMonitor.start', async () => {
+        if (prMonitor) {
+            await prMonitor.start();
+        } else {
+            vscode.window.showErrorMessage('PR Monitor is not initialized. Make sure you have a workspace folder open.');
+        }
+    });
+    context.subscriptions.push(prMonitorStartDisposable);
+
+    const prMonitorStopDisposable = vscode.commands.registerCommand('prMonitor.stop', () => {
+        if (prMonitor) {
+            prMonitor.stop();
+        } else {
+            vscode.window.showErrorMessage('PR Monitor is not initialized.');
+        }
+    });
+    context.subscriptions.push(prMonitorStopDisposable);
+
+    const prMonitorCheckNowDisposable = vscode.commands.registerCommand('prMonitor.checkNow', async () => {
+        if (prMonitor) {
+            await prMonitor.checkNow();
+        } else {
+            vscode.window.showErrorMessage('PR Monitor is not initialized.');
+        }
+    });
+    context.subscriptions.push(prMonitorCheckNowDisposable);
+
+    const prMonitorResetStateDisposable = vscode.commands.registerCommand('prMonitor.resetState', () => {
+        if (prMonitor) {
+            prMonitor.resetState();
+        } else {
+            vscode.window.showErrorMessage('PR Monitor is not initialized.');
+        }
+    });
+    context.subscriptions.push(prMonitorResetStateDisposable);
+
+    const prMonitorOpenConfigDisposable = vscode.commands.registerCommand('prMonitor.openConfig', async () => {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            vscode.window.showErrorMessage('No workspace folder open.');
+            return;
+        }
+
+        const configPath = path.join(workspaceRoot, '.vscode', 'pr-monitor-config.yaml');
+        const exampleConfigPath = path.join(workspaceRoot, '.vscode', 'pr-monitor-config.example.yaml');
+
+        // If config doesn't exist, offer to create it from example
+        if (!fs.existsSync(configPath)) {
+            const action = await vscode.window.showInformationMessage(
+                'PR Monitor configuration file does not exist. Would you like to create it from the example?',
+                'Create from Example',
+                'Cancel'
+            );
+
+            if (action === 'Create from Example') {
+                if (fs.existsSync(exampleConfigPath)) {
+                    fs.copyFileSync(exampleConfigPath, configPath);
+                } else {
+                    // Create a basic config
+                    const basicConfig = `# PR Monitor Configuration
+# This file defines which PRs to monitor for new comments
+
+# List of PRs to monitor
+prs:
+  # Format: owner/repo#pr_number
+  # - owner: example-org
+  #   repo: example-repo
+  #   pr_number: 123
+
+# Polling interval in seconds (default: 300 = 5 minutes)
+polling_interval: 300
+
+# Whether to automatically start monitoring on extension activation
+auto_start: false
+`;
+                    fs.writeFileSync(configPath, basicConfig);
+                }
+            } else {
+                return;
+            }
+        }
+
+        // Open the config file
+        const document = await vscode.workspace.openTextDocument(configPath);
+        await vscode.window.showTextDocument(document);
+    });
+    context.subscriptions.push(prMonitorOpenConfigDisposable);
 
     // Watch for changes in repositories to update visibility dynamically
     if (gitAPI) {

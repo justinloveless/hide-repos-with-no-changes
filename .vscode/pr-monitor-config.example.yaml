@@ -1,0 +1,20 @@
+# PR Monitor Configuration
+# This file defines which PRs to monitor for new comments
+# Place your actual config at .vscode/pr-monitor-config.yaml (gitignored by default)
+
+# List of PRs to monitor
+prs:
+  # Format: owner/repo#pr_number
+  - owner: justinloveless
+    repo: hide-repos-with-no-changes
+    pr_number: 123
+    
+  - owner: example-org
+    repo: example-repo
+    pr_number: 456
+
+# Polling interval in seconds (default: 300 = 5 minutes)
+polling_interval: 300
+
+# Whether to automatically start monitoring on extension activation
+auto_start: false
