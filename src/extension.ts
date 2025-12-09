@@ -50,6 +50,11 @@ let currentlyHiddenRepos: Set<string> = new Set();
 let fileWatcher: vscode.FileSystemWatcher | undefined;
 // Debounce timers for checking hidden repos
 let hiddenRepoCheckTimers: Map<string, NodeJS.Timeout> = new Map();
+// Status bar item to display aggregate change count
+let statusBarItem: vscode.StatusBarItem | undefined;
+// Aggregate source control to display at the top
+let aggregateSourceControl: vscode.SourceControl | undefined;
+let aggregateResourceGroup: vscode.SourceControlResourceGroup | undefined;
 
 async function scanDirectoryForGitRepos(dirPath: string, maxDepth: number = 3, currentDepth: number = 0): Promise<string[]> {
     const repos: string[] = [];
@@ -218,15 +223,16 @@ async function checkRepoHasChanges(repoPath: string): Promise<boolean> {
 
 /**
  * Update the badge count for all repositories to show the number of files with uncommitted changes.
- * This sets the badge on the Source Control activity bar icon (the icon you click to open the panel).
- * VS Code/Cursor automatically aggregates the counts from all repositories and displays the total
- * on the Source Control icon in the activity bar, so you can see you have changes even when the
- * panel is closed. This mimics the VS Code default behavior that Cursor is missing.
+ * This sets the badge on individual repositories, the aggregate source control at the top,
+ * and the status bar item.
  */
 function updateRepositoryBadges() {
     if (!gitAPI) {
         return;
     }
+
+    let totalAggregateCount = 0;
+    const allChanges: vscode.SourceControlResourceState[] = [];
 
     gitAPI.repositories.forEach(repo => {
         try {
@@ -237,15 +243,62 @@ function updateRepositoryBadges() {
                 repo.state.mergeChanges.length;
             
             // Set the badge count on the source control
-            // The platform automatically aggregates all repository counts
-            // and displays the total on the Source Control activity bar icon
             if (repo.sourceControl) {
                 repo.sourceControl.count = totalChanges;
             }
+            
+            // Add to aggregate count
+            totalAggregateCount += totalChanges;
+            
+            // Collect all changes for the aggregate view
+            repo.state.workingTreeChanges.forEach(change => {
+                allChanges.push({
+                    resourceUri: change.uri,
+                    decorations: {
+                        strikeThrough: false,
+                        tooltip: `${path.basename(repo.rootUri.fsPath)}: ${path.basename(change.uri.fsPath)}`
+                    }
+                });
+            });
+            repo.state.indexChanges.forEach(change => {
+                allChanges.push({
+                    resourceUri: change.uri,
+                    decorations: {
+                        strikeThrough: false,
+                        tooltip: `${path.basename(repo.rootUri.fsPath)}: ${path.basename(change.uri.fsPath)}`
+                    }
+                });
+            });
+            repo.state.mergeChanges.forEach(change => {
+                allChanges.push({
+                    resourceUri: change.uri,
+                    decorations: {
+                        strikeThrough: false,
+                        tooltip: `${path.basename(repo.rootUri.fsPath)}: ${path.basename(change.uri.fsPath)}`
+                    }
+                });
+            });
         } catch (error) {
             // Silently continue if we can't set the badge
         }
     });
+    
+    // Update the aggregate source control
+    if (aggregateSourceControl && aggregateResourceGroup) {
+        aggregateSourceControl.count = totalAggregateCount;
+        aggregateResourceGroup.resourceStates = allChanges;
+    }
+    
+    // Update the status bar item with the total count
+    if (statusBarItem) {
+        if (totalAggregateCount > 0) {
+            statusBarItem.text = `$(git-branch) ${totalAggregateCount} change${totalAggregateCount === 1 ? '' : 's'}`;
+            statusBarItem.tooltip = `${totalAggregateCount} uncommitted change${totalAggregateCount === 1 ? '' : 's'} across ${gitAPI.repositories.length} ${gitAPI.repositories.length === 1 ? 'repository' : 'repositories'}`;
+            statusBarItem.show();
+        } else {
+            statusBarItem.hide();
+        }
+    }
 }
 
 /**
@@ -302,9 +355,34 @@ async function handleFileChange(uri: vscode.Uri) {
     hiddenRepoCheckTimers.set(repoPath, timer);
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+    // Restore the hiding state from the previous session
+    isHidingEnabled = context.globalState.get<boolean>('isHidingEnabled', false);
+    
     // Initialize context for the icon state
     vscode.commands.executeCommand('setContext', 'hideReposWithNoChanges.isHiding', isHidingEnabled);
+
+    // Create a status bar item to display the aggregate change count
+    // This appears at the bottom of the window and shows the total number of changes
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    statusBarItem.command = 'workbench.view.scm'; // Click to open Source Control panel
+    context.subscriptions.push(statusBarItem);
+
+    // Create an aggregate source control to show at the top with all changes
+    aggregateSourceControl = vscode.scm.createSourceControl(
+        'allChangesAggregate',
+        'All Repositories',
+        undefined
+    );
+    aggregateSourceControl.quickDiffProvider = undefined;
+    
+    // Create a resource group for the aggregate changes
+    aggregateResourceGroup = aggregateSourceControl.createResourceGroup(
+        'allChanges',
+        'All Changes'
+    );
+    
+    context.subscriptions.push(aggregateSourceControl);
 
     // Get the Git extension API
     const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git');
@@ -319,11 +397,36 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }
         
-        // Scan workspace for all git repositories
-        discoverAllGitRepositories().then(async () => {
-            // Open workspace root repositories that VS Code might not auto-open
-            await openWorkspaceRootRepositories();
-        });
+        // Scan workspace for all git repositories and wait for it to complete
+        // This is critical so we can track hidden repos properly on startup
+        await discoverAllGitRepositories();
+        
+        // Open workspace root repositories that VS Code might not auto-open
+        await openWorkspaceRootRepositories();
+        
+        // If hiding was enabled in the previous session, we need to ensure
+        // all repos are discovered and properly tracked before applying visibility
+        if (isHidingEnabled) {
+            // Wait a bit for Git extension to fully initialize
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Populate currentlyHiddenRepos with all repos that aren't currently open
+            // This is critical because repos closed in the previous session won't be
+            // in gitAPI.repositories, but we need to track them for auto-detection
+            for (const [repoPath, repoUri] of allKnownRepos.entries()) {
+                const isOpen = gitAPI?.repositories.some(
+                    repo => repo.rootUri.fsPath === repoPath
+                );
+                
+                if (!isOpen && !isWorkspaceRoot(repoPath)) {
+                    // This repo is closed (hidden) from the previous session
+                    currentlyHiddenRepos.add(repoPath);
+                }
+            }
+            
+            // Now update visibility based on the current state
+            await updateRepositoryVisibility();
+        }
     }
 
     // Set up file watcher to detect changes in workspace
@@ -373,6 +476,9 @@ export function activate(context: vscode.ExtensionContext) {
         // Toggle the state
         isHidingEnabled = !isHidingEnabled;
         
+        // Persist the state so it survives extension reloads
+        await context.globalState.update('isHidingEnabled', isHidingEnabled);
+        
         // Update the context for the icon
         vscode.commands.executeCommand('setContext', 'hideReposWithNoChanges.isHiding', isHidingEnabled);
 
@@ -415,9 +521,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Watch for changes in repositories to update visibility dynamically
     if (gitAPI) {
-        // Initial badge update
-        updateRepositoryBadges();
-        
         // Listen for state changes in existing repositories
         gitAPI.repositories.forEach(repo => {
             const changeListener = repo.ui.onDidChange(() => {
@@ -463,6 +566,15 @@ export function activate(context: vscode.ExtensionContext) {
             updateRepositoryBadges();
         });
         context.subscriptions.push(repoCloseListener);
+        
+        // Initial badge update - do it immediately
+        updateRepositoryBadges();
+        
+        // Then do delayed updates to catch any repositories that load asynchronously
+        // Git extension may not have loaded all repos yet when we first activate
+        setTimeout(() => updateRepositoryBadges(), 500);
+        setTimeout(() => updateRepositoryBadges(), 1500);
+        setTimeout(() => updateRepositoryBadges(), 3000);
     }
 }
 
@@ -542,5 +654,17 @@ async function updateRepositoryVisibility() {
     }
 }
 
-export function deactivate() {}
+export function deactivate() {
+    // Clean up status bar item
+    if (statusBarItem) {
+        statusBarItem.dispose();
+        statusBarItem = undefined;
+    }
+    
+    // Clean up aggregate source control
+    if (aggregateSourceControl) {
+        aggregateSourceControl.dispose();
+        aggregateSourceControl = undefined;
+    }
+}
 
