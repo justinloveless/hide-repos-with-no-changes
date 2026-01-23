@@ -42,7 +42,7 @@ Update these fields in `package.json`:
 3. **bugs.url**: Update with your GitHub username  
 4. **homepage**: Update with your GitHub username
 
-### Quick Publishing Steps
+### Publishing to VS Code Marketplace
 
 1. **Create a publisher account** (if you don't have one):
    - Go to https://marketplace.visualstudio.com/manage
@@ -65,6 +65,47 @@ Update these fields in `package.json`:
    vsce publish
    ```
 
+### Publishing to Open VSX Registry
+
+Open VSX is an open-source registry used by VSCodium, Gitpod, and other VS Code-compatible editors.
+
+1. **Create an Open VSX account**:
+   - Go to https://open-vsx.org/
+   - Sign in with GitHub (or Eclipse Foundation account)
+
+2. **Create a namespace** (your publisher):
+   - Go to https://open-vsx.org/user-settings/namespaces
+   - Click "Create Namespace"
+   - Use the same name as your VS Code Marketplace publisher
+
+3. **Create a Personal Access Token**:
+   - Go to https://open-vsx.org/user-settings/tokens
+   - Click "Create Access Token"
+   - Copy the token!
+
+4. **Install ovsx CLI**:
+   ```bash
+   npm install -g ovsx
+   ```
+
+5. **Publish**:
+   ```bash
+   ovsx publish hide-repos-with-no-changes-0.0.1.vsix -p YOUR_OVSX_TOKEN
+   ```
+
+### Publishing to Both Marketplaces
+
+```bash
+# Package the extension
+vsce package
+
+# Publish to VS Code Marketplace
+vsce publish
+
+# Publish to Open VSX
+ovsx publish hide-repos-with-no-changes-0.0.1.vsix -p YOUR_OVSX_TOKEN
+```
+
 ### Alternative: Manual Installation
 
 You can install the generated `.vsix` file locally to test:
@@ -84,10 +125,14 @@ You can install the generated `.vsix` file locally to test:
 ## 🎯 What's Next?
 
 1. **Update package.json** with your publisher and repository info
-2. **Create marketplace accounts** (publisher + PAT)
-3. **Run `vsce publish`** to publish to the marketplace
-4. **Share your extension!** It will be available at:
-   `https://marketplace.visualstudio.com/items?itemName=YOUR-PUBLISHER.hide-repos-with-no-changes`
+2. **Create marketplace accounts**:
+   - VS Code Marketplace (publisher + PAT)
+   - Open VSX Registry (namespace + PAT)
+3. **Publish to VS Code Marketplace**: Run `vsce publish`
+4. **Publish to Open VSX**: Run `ovsx publish hide-repos-with-no-changes-0.0.1.vsix -p YOUR_TOKEN`
+5. **Share your extension!** It will be available at:
+   - VS Code Marketplace: `https://marketplace.visualstudio.com/items?itemName=YOUR-PUBLISHER.hide-repos-with-no-changes`
+   - Open VSX: `https://open-vsx.org/extension/YOUR-NAMESPACE/hide-repos-with-no-changes`
 
 ## 💡 Optional Improvements
 

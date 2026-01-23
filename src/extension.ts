@@ -204,21 +204,84 @@ function findRepoForFile(filePath: string): string | undefined {
 }
 
 /**
- * Check if a repository has any Git changes by running git status --porcelain.
+ * Check the status of a repository including changes, pending pushes, and pending pulls.
  * This works even if the repo is not currently open in the Git extension.
+ * 
+ * @returns Object with hasChanges (uncommitted changes), hasPush (commits to push), and hasPull (commits to pull)
  */
-async function checkRepoHasChanges(repoPath: string): Promise<boolean> {
+async function checkRepoStatus(repoPath: string): Promise<{ hasChanges: boolean; hasPush: boolean; hasPull: boolean }> {
     try {
-        const { stdout } = await execAsync('git status --porcelain', {
+        // Check for uncommitted changes
+        const { stdout: statusOutput } = await execAsync('git status --porcelain', {
             cwd: repoPath,
             timeout: 5000 // 5 second timeout
         });
         
-        // If git status --porcelain returns any output, there are changes
-        return stdout.trim().length > 0;
+        const hasChanges = statusOutput.trim().length > 0;
+        
+        // Check for pending pushes and pulls
+        // First, make sure we have the latest remote info (don't fetch, just check)
+        let hasPush = false;
+        let hasPull = false;
+        
+        try {
+            // Get the current branch
+            const { stdout: branchOutput } = await execAsync('git branch --show-current', {
+                cwd: repoPath,
+                timeout: 5000
+            });
+            
+            const currentBranch = branchOutput.trim();
+            
+            if (currentBranch) {
+                // Check if the branch has an upstream
+                try {
+                    const { stdout: upstreamOutput } = await execAsync(`git rev-parse --abbrev-ref ${currentBranch}@{upstream}`, {
+                        cwd: repoPath,
+                        timeout: 5000
+                    });
+                    
+                    const upstream = upstreamOutput.trim();
+                    
+                    if (upstream) {
+                        // Check for commits to push (local commits not in remote)
+                        const { stdout: pushOutput } = await execAsync(`git rev-list ${upstream}..${currentBranch} --count`, {
+                            cwd: repoPath,
+                            timeout: 5000
+                        });
+                        
+                        hasPush = parseInt(pushOutput.trim()) > 0;
+                        
+                        // Check for commits to pull (remote commits not in local)
+                        const { stdout: pullOutput } = await execAsync(`git rev-list ${currentBranch}..${upstream} --count`, {
+                            cwd: repoPath,
+                            timeout: 5000
+                        });
+                        
+                        hasPull = parseInt(pullOutput.trim()) > 0;
+                    }
+                } catch (upstreamError) {
+                    // No upstream branch configured, so no push/pull status
+                }
+            }
+        } catch (branchError) {
+            // Error getting branch info, skip push/pull checks
+        }
+        
+        return { hasChanges, hasPush, hasPull };
     } catch (error) {
-        return false;
+        return { hasChanges: false, hasPush: false, hasPull: false };
     }
+}
+
+/**
+ * Check if a repository has any Git changes by running git status --porcelain.
+ * This works even if the repo is not currently open in the Git extension.
+ * @deprecated Use checkRepoStatus instead for more detailed information
+ */
+async function checkRepoHasChanges(repoPath: string): Promise<boolean> {
+    const status = await checkRepoStatus(repoPath);
+    return status.hasChanges;
 }
 
 /**
@@ -334,9 +397,18 @@ async function handleFileChange(uri: vscode.Uri) {
     const timer = setTimeout(async () => {
         hiddenRepoCheckTimers.delete(repoPath);
         
-        const hasChanges = await checkRepoHasChanges(repoPath);
+        const status = await checkRepoStatus(repoPath);
+        const config = vscode.workspace.getConfiguration('hideReposWithNoChanges');
+        const showReposWithPendingPulls = config.get<boolean>('showReposWithPendingPulls', false);
         
-        if (hasChanges) {
+        // Determine if repo should be shown
+        // Always show if: has uncommitted changes, has commits to push (ahead of remote)
+        // Optionally show if: has commits to pull (behind remote) AND showReposWithPendingPulls is enabled
+        const shouldShow = status.hasChanges || 
+                          status.hasPush || 
+                          (showReposWithPendingPulls && status.hasPull);
+        
+        if (shouldShow) {
             // Remove from hidden set
             currentlyHiddenRepos.delete(repoPath);
             
@@ -584,33 +656,47 @@ async function updateRepositoryVisibility() {
     }
 
     if (isHidingEnabled) {
+        const config = vscode.workspace.getConfiguration('hideReposWithNoChanges');
+        const showReposWithPendingPulls = config.get<boolean>('showReposWithPendingPulls', false);
+        
         // Check which repos should be hidden
         const reposToHide: Repository[] = [];
         const reposToShow: Repository[] = [];
         
-        gitAPI.repositories.forEach(repo => {
+        for (const repo of gitAPI.repositories) {
             const repoPath = repo.rootUri.fsPath;
             
             // Never hide workspace root repositories
             if (isWorkspaceRoot(repoPath)) {
-                return;
+                continue;
             }
             
             // Check if the repository has any changes
-            const hasChanges = 
+            const hasLocalChanges = 
                 repo.state.workingTreeChanges.length > 0 ||
                 repo.state.indexChanges.length > 0 ||
                 repo.state.mergeChanges.length > 0;
             
-            if (!hasChanges && !currentlyHiddenRepos.has(repoPath)) {
+            // Check push/pull status
+            const status = await checkRepoStatus(repoPath);
+            
+            // Determine if repo should be visible:
+            // - Always show if there are local changes (uncommitted)
+            // - Always show if there are commits to push (ahead of remote)
+            // - Show if there are commits to pull (behind remote) AND showReposWithPendingPulls is enabled
+            const shouldBeVisible = hasLocalChanges || 
+                                   status.hasPush || 
+                                   (showReposWithPendingPulls && status.hasPull);
+            
+            if (!shouldBeVisible && !currentlyHiddenRepos.has(repoPath)) {
                 reposToHide.push(repo);
-            } else if (hasChanges && currentlyHiddenRepos.has(repoPath)) {
-                // This repo now has changes and should be shown
+            } else if (shouldBeVisible && currentlyHiddenRepos.has(repoPath)) {
+                // This repo should be shown
                 reposToShow.push(repo);
             }
-        });
+        }
 
-        // Show repos that now have changes by using git.close and git.openRepository
+        // Show repos that should be visible
         for (const repo of reposToShow) {
             currentlyHiddenRepos.delete(repo.rootUri.fsPath);
             // First close it, then reopen it to make it visible

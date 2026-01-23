@@ -2,7 +2,7 @@
   "name": "hide-repos-with-no-changes",
   "displayName": "Hide Repos with No Changes",
   "description": "Hide repositories with no changes in the Source Control panel",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "publisher": "jloveless",
   "license": "MIT",
   "repository": {
@@ -56,6 +56,16 @@
           "icon": "$(eye)"
         }
       ]
+    },
+    "configuration": {
+      "title": "Hide Repos with No Changes",
+      "properties": {
+        "hideReposWithNoChanges.showReposWithPendingPulls": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show repositories that are behind the remote (have commits to pull). When enabled, repos with pending pulls will remain visible even if they have no local changes."
+        }
+      }
     }
   },
   "scripts": {

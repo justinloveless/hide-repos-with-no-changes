@@ -2,6 +2,12 @@
 
 This extension helps you manage multi-repository workspaces by hiding repositories that have no changes in the Source Control panel.
 
+## Installation
+
+Install this extension from:
+- [Visual Studio Code Marketplace](https://marketplace.visualstudio.com/) - for VS Code and Cursor
+- [Open VSX Registry](https://open-vsx.org/) - for VSCodium, Gitpod, and other compatible editors
+
 ## Features
 
 - Toggle command to hide/show repositories with no changes
@@ -10,6 +16,10 @@ This extension helps you manage multi-repository workspaces by hiding repositori
 - Visual indicator showing whether hiding is enabled (eye icon changes)
 - Simple one-command toggle via Command Palette or toolbar button
 - Badge count on Source Control activity bar icon showing total number of uncommitted changes across all repositories (mimics VS Code default behavior that Cursor is missing) - allows you to see you have changes even when the panel is closed
+- Intelligent handling of push/pull status:
+  - **Never hides** repositories with uncommitted changes
+  - **Never hides** repositories with commits ready to push
+  - **Configurable behavior** for repositories with commits to pull (see Settings below)
 
 ## Usage
 
@@ -27,6 +37,16 @@ This extension helps you manage multi-repository workspaces by hiding repositori
 3. Repositories without changes will be hidden from the Source Control panel
 4. Run the command again to show all repositories
 
+## Settings
+
+This extension contributes the following settings:
+
+- `hideReposWithNoChanges.hideReposWithPendingPulls`: (default: `false`)
+  - When `false`: Repositories with commits to pull from the remote will remain visible, even if they have no local changes or pushable commits
+  - When `true`: Repositories with only pending pulls (no local changes or pushable commits) will be hidden
+
+**Note**: Repositories with commits to **push** are always visible, regardless of this setting.
+
 ## Requirements
 
 This extension requires the built-in Git extension to be enabled.
@@ -36,6 +56,17 @@ This extension requires the built-in Git extension to be enabled.
 None at this time.
 
 ## Release Notes
+
+### 0.0.3
+
+- Added support for checking push/pull status of repositories
+- Repositories with commits to push are now always visible
+- Added configurable setting to control visibility of repositories with pending pulls
+- Improved repository status detection with upstream tracking
+
+### 0.0.2
+
+Bug fixes and improvements.
 
 ### 0.0.1
 

@@ -1,6 +1,6 @@
 # Publishing Guide for Hide Repos with No Changes Extension
 
-This guide walks you through the steps to publish your VS Code extension to the Visual Studio Code Marketplace.
+This guide walks you through the steps to publish your VS Code extension to both the Visual Studio Code Marketplace and Open VSX Registry.
 
 ## Prerequisites
 
@@ -187,17 +187,227 @@ Add marketplace badges to your README.md:
 - Clear your browser cache
 - Check your publisher dashboard to ensure it's published
 
+---
+
+# Publishing to Open VSX Registry
+
+[Open VSX](https://open-vsx.org/) is an open-source registry for VS Code extensions, used by editors like VSCodium, Gitpod, Eclipse Theia, and others. Publishing to Open VSX ensures your extension is available to users of these editors.
+
+## Prerequisites
+
+Before you can publish to Open VSX, you need:
+1. An Open VSX account
+2. A Personal Access Token (PAT) for Open VSX
+3. The `ovsx` tool installed
+4. Your extension packaged as a `.vsix` file
+
+## Step-by-Step Open VSX Publishing Instructions
+
+### Step 1: Create an Open VSX Account
+
+1. Go to https://open-vsx.org/
+2. Click "Sign In" in the top right
+3. Sign in using one of these providers:
+   - GitHub (recommended)
+   - Eclipse Foundation account
+4. Complete your profile
+
+### Step 2: Create a Namespace (Publisher)
+
+In Open VSX, your publisher is called a "namespace":
+
+1. Go to https://open-vsx.org/user-settings/namespaces
+2. Click "Create Namespace"
+3. Enter your namespace name:
+   - Must be unique
+   - Should match your VS Code Marketplace publisher name if possible
+   - Lowercase, no spaces
+4. Save the namespace
+
+### Step 3: Create a Personal Access Token
+
+1. Go to https://open-vsx.org/user-settings/tokens
+2. Click "Create Access Token"
+3. Configure the token:
+   - **Description**: "Extension Publishing" (or similar)
+   - **Expiration**: Choose an appropriate duration (or no expiration)
+4. Click "Create" and **COPY THE TOKEN** (you won't be able to see it again!)
+
+### Step 4: Install ovsx Tool
+
+Install the Open VSX CLI tool globally:
+
+```bash
+npm install -g ovsx
+```
+
+### Step 5: Package Your Extension
+
+If you haven't already packaged your extension:
+
+```bash
+vsce package
+```
+
+This creates a `.vsix` file (e.g., `hide-repos-with-no-changes-0.0.1.vsix`).
+
+### Step 6: Publish to Open VSX
+
+Publish using the `ovsx` CLI:
+
+```bash
+ovsx publish hide-repos-with-no-changes-0.0.1.vsix -p YOUR_ACCESS_TOKEN
+```
+
+Or set the token as an environment variable:
+
+```bash
+export OVSX_PAT=YOUR_ACCESS_TOKEN
+ovsx publish hide-repos-with-no-changes-0.0.1.vsix
+```
+
+### Step 7: Verify Publication
+
+1. Go to https://open-vsx.org/
+2. Search for your extension name
+3. Visit your extension's page: `https://open-vsx.org/extension/YOUR-NAMESPACE/hide-repos-with-no-changes`
+4. Verify all information is correct
+
+## Publishing to Both Marketplaces
+
+To publish to both VS Code Marketplace and Open VSX:
+
+```bash
+# Compile and package
+npm run compile
+vsce package
+
+# Publish to VS Code Marketplace
+vsce publish
+
+# Publish to Open VSX
+ovsx publish hide-repos-with-no-changes-0.0.1.vsix -p YOUR_OVSX_TOKEN
+```
+
+**Pro tip**: You can automate this in your CI/CD pipeline (GitHub Actions, etc.)
+
+## Updating Your Extension on Open VSX
+
+When you want to publish an update to Open VSX:
+
+1. Update your code and version number
+2. Package the new version: `vsce package`
+3. Publish to Open VSX: `ovsx publish hide-repos-with-no-changes-X.X.X.vsix -p YOUR_TOKEN`
+
+## Open VSX Publishing Checklist
+
+Before publishing to Open VSX, ensure:
+
+- [ ] Extension is already packaged as a `.vsix` file
+- [ ] You have an Open VSX account
+- [ ] You've created a namespace (publisher)
+- [ ] You have a valid Personal Access Token
+- [ ] The `ovsx` tool is installed
+- [ ] Your extension works in other VS Code-compatible editors (optional but recommended)
+
+## Differences Between VS Code Marketplace and Open VSX
+
+| Feature | VS Code Marketplace | Open VSX |
+|---------|-------------------|----------|
+| **Account Provider** | Microsoft/Azure | GitHub/Eclipse |
+| **CLI Tool** | `vsce` | `ovsx` |
+| **Used By** | VS Code, Cursor | VSCodium, Gitpod, Theia, Eclipse IDE |
+| **Token Scope** | Azure DevOps Marketplace | Open VSX Access Token |
+| **Approval Process** | Automatic (with validation) | Automatic |
+| **Cost** | Free | Free |
+
+## Troubleshooting Open VSX
+
+### Error: "Extension ... could not be found"
+- Make sure you've created a namespace that matches your extension's publisher name
+- Verify the namespace is active in your account settings
+
+### Error: "Authentication failed"
+- Your PAT may have expired
+- Ensure you're using the correct token from https://open-vsx.org/user-settings/tokens
+
+### Error: "Extension validation failed"
+- Ensure your `.vsix` file is valid (test it with `vsce package` first)
+- Check that all required fields in `package.json` are filled out correctly
+
+### Extension not appearing in Open VSX search
+- Wait a few minutes after publishing
+- Clear your browser cache
+- Verify the extension appears in your namespace dashboard
+
 ## Resources
 
+**VS Code Marketplace:**
 - [VS Code Extension Publishing Documentation](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
 - [Extension Marketplace](https://marketplace.visualstudio.com/)
 - [Extension Manifest Reference](https://code.visualstudio.com/api/references/extension-manifest)
 - [vsce CLI Reference](https://github.com/microsoft/vscode-vsce)
 
+**Open VSX:**
+- [Open VSX Registry](https://open-vsx.org/)
+- [Open VSX Publishing Documentation](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions)
+- [ovsx CLI Reference](https://github.com/eclipse/openvsx/tree/master/cli)
+- [Open VSX FAQ](https://github.com/eclipse/openvsx/wiki)
+
+## Automation with CI/CD
+
+You can automate publishing to both marketplaces using GitHub Actions. Here's a sample workflow:
+
+```yaml
+name: Publish Extension
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Compile
+        run: npm run compile
+      
+      - name: Install vsce and ovsx
+        run: npm install -g @vscode/vsce ovsx
+      
+      - name: Publish to VS Code Marketplace
+        run: vsce publish -p ${{ secrets.VSCE_TOKEN }}
+      
+      - name: Publish to Open VSX
+        run: ovsx publish -p ${{ secrets.OVSX_TOKEN }}
+```
+
+Store your tokens as secrets in GitHub:
+- `VSCE_TOKEN`: Your Azure DevOps PAT
+- `OVSX_TOKEN`: Your Open VSX PAT
+
 ## Support
 
 If you encounter issues during publishing:
+
+**VS Code Marketplace:**
 1. Check the [vsce GitHub issues](https://github.com/microsoft/vscode-vsce/issues)
 2. Review the [VS Code Extension API documentation](https://code.visualstudio.com/api)
+
+**Open VSX:**
+1. Check the [Open VSX GitHub issues](https://github.com/eclipse/openvsx/issues)
+2. Review the [Open VSX wiki](https://github.com/eclipse/openvsx/wiki)
+
+**General:**
 3. Ask on [Stack Overflow](https://stackoverflow.com/questions/tagged/visual-studio-code) with the `visual-studio-code` tag
 
